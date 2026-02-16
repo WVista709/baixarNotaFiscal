@@ -14,32 +14,20 @@ public class MenuPrincipal {
 
     private static final String BASE_URL = "https://online.sefaz.am.gov.br/dte/";
     private WebScrapping web;
+    private Scanner scanner;
 
-    public MenuPrincipal(WebScrapping web) {
+    public MenuPrincipal(WebScrapping web, Scanner scanner) {
         this.web = web;
+        this.scanner = scanner;
     }
 
-    public void processar(Document documento) {
-        verificarPagina(documento);
-    }
-
-    /**
-     * Verifica se a página contém a consulta de arquivos XML e, se sim, processa a consulta. <br>
-     * Caso contrário, exibe o menu de opções da página principal.
-     */
-    private void verificarPagina(Document documento) {
-        if (documento.text().contains("CONSULTA DE ARQUIVOS XML")) {
-            new ConsultaXml(web).processar(documento);
-        } else {
-            exibirMenu(documento);
-        }
-    }
+  
 
     /**
      * Exibe o menu de opções da página principal.
      *
      */
-    private void exibirMenu(Document documento) {
+    public void exibirMenu(Document documento) {
         System.out.println("---- Página Principal Carregada ----");
         
         Elements itensMenu = documento.select("div.menuDte_itemMenu");
@@ -84,8 +72,6 @@ public class MenuPrincipal {
                Document proximaPagina = web.getPagina(urlEscolhida);
                System.out.println("Página acessada: " + proximaPagina.title());
                
-               verificarPagina(proximaPagina);
-               
             } catch (Exception e) {
                 System.out.println("Erro ao acessar opção: " + e.getMessage());
             }
@@ -96,18 +82,20 @@ public class MenuPrincipal {
      * Solicita que o usuário escolha uma opção a partir do console.
      */
     private int obterEscolhaDoUsuario(int totalLinks) {
-        try (Scanner scanner = new Scanner(System.in)) {
-            System.out.print("Escolha uma opção (digite o número): ");
-            int escolha = -1;
-            if (scanner.hasNextInt()) {
-                escolha = scanner.nextInt();
-                if (escolha <= 0 || escolha > totalLinks) {
-                    System.out.println("Opção inválida.");
-                    escolha = -1;
-                }
+        System.out.print("Escolha uma opção (digite o número): ");
+        int escolha = -1;
+        if (scanner.hasNextInt()) {
+            escolha = scanner.nextInt();
+            // Consumir o \n que sobra
+            scanner.nextLine();
+            if (escolha <= 0 || escolha > totalLinks) {
+                System.out.println("Opção inválida.");
+                escolha = -1;
             }
-            return escolha;
+        } else {
+            scanner.nextLine();
         }
+        return escolha;
     }
 
     public WebScrapping getWeb() {

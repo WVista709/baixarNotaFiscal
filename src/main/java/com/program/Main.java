@@ -9,7 +9,7 @@ public class Main {
         try {
         Certificados certificados = new Certificados();
         certificados.mostrarCertificados();
-        CertificadoEscolhido certificadoEscolhido = certificados.escolherCertificadoPorIndex(2);
+        CertificadoEscolhido certificadoEscolhido = certificados.escolherCertificadoPorIndex(1);
         SiteSefazAM siteSefazAM = new SiteSefazAM(certificadoEscolhido);
         siteSefazAM.acessarSite();
         } catch (Exception e) {

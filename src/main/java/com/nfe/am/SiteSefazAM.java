@@ -15,8 +15,16 @@ public class SiteSefazAM extends WebScrapping {
 
     private static final String BASE_URL = "https://online.sefaz.am.gov.br/dte/";
 
+    @SuppressWarnings("FieldMayBeFinal")
+    private Scanner scanner;
+
     public SiteSefazAM(CertificadoEscolhido certificadoEscolhido) throws Exception {
         super(certificadoEscolhido);
+        this.scanner = new Scanner(System.in);
+    }
+
+    public Scanner getScanner() {
+        return scanner;
     }
 
     /**
@@ -37,7 +45,7 @@ public class SiteSefazAM extends WebScrapping {
         } else {
             System.out.println("Login direto efetuado (sem seleção de filiais).");
             System.out.println("Título da página: " + documento.title());
-            new MenuPrincipal(this).processar(documento);
+            new MenuPrincipal(this, this.scanner).exibirMenu(documento);
         }
     }
 
@@ -101,18 +109,21 @@ public class SiteSefazAM extends WebScrapping {
      * Solicita que o usuário escolha uma inscrição a partir do console.
      */
     private int obterEscolhaDoUsuario(int totalLinks) {
-        try (Scanner scanner = new Scanner(System.in)) {
-            System.out.print("Escolha uma opção (digite o número): ");
-            int escolha = -1;
-            if (scanner.hasNextInt()) {
-                escolha = scanner.nextInt();
-                if (escolha <= 0 || escolha > totalLinks) {
-                    System.out.println("Opção inválida.");
-                    escolha = -1;
-                }
+        System.out.print("Escolha uma opção (digite o número): ");
+        int escolha = -1;
+        if (scanner.hasNextInt()) {
+            escolha = scanner.nextInt();
+            // Consumir o \n que sobra
+            scanner.nextLine(); 
+            if (escolha <= 0 || escolha > totalLinks) {
+                System.out.println("Opção inválida.");
+                escolha = -1;
             }
-            return escolha;
+        } else {
+            // Consumir entrada inválida
+            scanner.nextLine();
         }
+        return escolha;
     }
 
     /**
@@ -130,8 +141,8 @@ public class SiteSefazAM extends WebScrapping {
             System.out.println("Página acessada com sucesso!");
             System.out.println("Título da nova página: " + proximaPagina.title());
             
-            // Chama o método comum para processar a página principal
-            new MenuPrincipal(this).processar(proximaPagina);
+            // Exibe o menu de opções da página principal
+            new MenuPrincipal(this, this.scanner).exibirMenu(proximaPagina);
             
         } catch (Exception e) {
             System.out.println("Erro ao acessar a página: " + e.getMessage());
