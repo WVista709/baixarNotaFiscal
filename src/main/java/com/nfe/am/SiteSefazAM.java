@@ -45,7 +45,79 @@ public class SiteSefazAM extends WebScrapping {
         } else {
             System.out.println("Login direto efetuado (sem seleção de filiais).");
             System.out.println("Título da página: " + documento.title());
-            new MenuPrincipal(this, this.scanner).exibirMenu(documento);
+            exibirMenu(documento);
+        }
+    }
+
+    /**
+     * Exibe o menu de opções da página principal.
+     *
+     */
+    public Integer exibirMenu(Document documento) {
+        System.out.println("---- Página Principal Carregada ----");
+
+        Elements itensMenu = documento.select("div.menuDte_itemMenu");
+        System.out.println("Encontradas " + itensMenu.size() + " opções de menu.");
+
+        if (itensMenu.isEmpty()) {
+            System.out.println("Nenhum item de menu encontrado.");
+            return null;
+        }
+
+        List<String> titulos = new ArrayList<>();
+        List<String> links = new ArrayList<>();
+        List<String> idLinks = new ArrayList<>();
+
+        System.out.println("Opções disponíveis (idlink - Título):");
+        for (Element item : itensMenu) {
+            String titulo = item.select("div.menuDte_itemMenu_titulo").text();
+            String idLink = item.attr("idlink");
+            String href = item.attr("href");
+
+            if (!idLink.isEmpty()) {
+                links.add("https://online.sefaz.am.gov.br/redirect2.asp?id=" + idLink);
+                titulos.add(titulo);
+                idLinks.add(idLink);
+                System.out.println(idLink + " - " + titulo);
+            } else if (!href.isEmpty()) {
+                // Para as opções sem idlink, gere um id "pseudo" para permitir seleção, se necessário
+                // Se não quiser permitir seleção sem idlink, apenas ignore este bloco
+                if (!href.startsWith("http")) {
+                    href = BASE_URL + href;
+                }
+                links.add(href);
+                titulos.add(titulo);
+                idLinks.add(""); // idlink vazio para manter indices alinhados
+                System.out.println("(sem idlink) - " + titulo);
+            }
+        }
+
+        System.out.print("Escolha uma opção informando o idlink: ");
+        String escolhaIdLink = scanner.nextLine().trim();
+        int idxEscolhido = -1;
+
+        // Encontrar pelo idlink informado
+        for (int i = 0; i < idLinks.size(); i++) {
+            if (escolhaIdLink.equals(idLinks.get(i))) {
+                idxEscolhido = i;
+                break;
+            }
+        }
+
+        if (idxEscolhido != -1) {
+            String urlEscolhida = links.get(idxEscolhido);
+            System.out.println("Navegando para: " + titulos.get(idxEscolhido));
+            try {
+                Document proximaPagina = getPagina(urlEscolhida);
+                System.out.println("Página acessada: " + proximaPagina.title());
+                return idxEscolhido;
+            } catch (Exception e) {
+                System.out.println("Erro ao acessar opção: " + e.getMessage());
+                return null;
+            }
+        } else {
+            System.out.println("idlink não encontrado entre as opções.");
+            return null;
         }
     }
 
@@ -113,14 +185,12 @@ public class SiteSefazAM extends WebScrapping {
         int escolha = -1;
         if (scanner.hasNextInt()) {
             escolha = scanner.nextInt();
-            // Consumir o \n que sobra
             scanner.nextLine(); 
             if (escolha <= 0 || escolha > totalLinks) {
                 System.out.println("Opção inválida.");
                 escolha = -1;
             }
         } else {
-            // Consumir entrada inválida
             scanner.nextLine();
         }
         return escolha;
@@ -142,7 +212,7 @@ public class SiteSefazAM extends WebScrapping {
             System.out.println("Título da nova página: " + proximaPagina.title());
             
             // Exibe o menu de opções da página principal
-            new MenuPrincipal(this, this.scanner).exibirMenu(proximaPagina);
+            exibirMenu(proximaPagina);
             
         } catch (Exception e) {
             System.out.println("Erro ao acessar a página: " + e.getMessage());
