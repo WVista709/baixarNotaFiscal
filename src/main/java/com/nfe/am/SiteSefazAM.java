@@ -18,6 +18,9 @@ public class SiteSefazAM extends WebScrapping {
     @SuppressWarnings("FieldMayBeFinal")
     private Scanner scanner;
 
+    /**
+     * Construtor que recebe o certificado escolhido e inicializa o scanner para leitura de dados do usuário.
+     */
     public SiteSefazAM(CertificadoEscolhido certificadoEscolhido) throws Exception {
         super(certificadoEscolhido);
         this.scanner = new Scanner(System.in);
@@ -28,103 +31,121 @@ public class SiteSefazAM extends WebScrapping {
     }
 
     /**
-     * Acessa o site da Sefaz AM e executa a rotina de scraping
+     * Função que acessa o site da Sefaz AM e lida com a seleção de filiais e o login.
      */
     @Override
     public void acessarSite() throws Exception {
         System.out.println("---- Iniciando rotina do site Sefaz AM ----");
-        String url = BASE_URL + "loginSSL.asp";
-        Document documento = getPagina(url);
-        
-        // Verifica se caiu na tela de seleção de filiais
-        Elements linhasFiliais = documento.select("table.dg_table tbody tr");
-        
-        if (!linhasFiliais.isEmpty()) {
+        String urlDeLogin = BASE_URL + "loginSSL.asp";
+        Document paginaAtual = getPagina(urlDeLogin);
+
+        //Verifica se há filiais para seleção
+        String linhaDeSelecaoDeFiliais = "table.dg_table tbody tr";
+        Boolean temFiliais = !paginaAtual.select(linhaDeSelecaoDeFiliais).isEmpty();
+        if (temFiliais) {
             System.out.println("Seleção de filiais detectada.");
-            processarFiliais(documento);
+            paginaAtual = processarFiliais(paginaAtual);
         } else {
             System.out.println("Login direto efetuado (sem seleção de filiais).");
-            System.out.println("Título da página: " + documento.title());
-            exibirMenu(documento);
+        }
+
+        //Exibe o menu de opções se a página atual não for nula
+        if (paginaAtual != null) {
+            //gerarTXT(paginaAtual, "paginaAtual.txt");
+            exibirMenu(paginaAtual);
         }
     }
 
     /**
-     * Exibe o menu de opções da página principal.
-     *
+     * Função que exibe o menu de opções da página principal.
      */
-    public Integer exibirMenu(Document documento) {
+    private void exibirMenu(Document documento) throws Exception {
         System.out.println("---- Página Principal Carregada ----");
 
-        Elements itensMenu = documento.select("div.menuDte_itemMenu");
-        System.out.println("Encontradas " + itensMenu.size() + " opções de menu.");
-
-        if (itensMenu.isEmpty()) {
+        //Extrai os itens do menu da página
+        List<MenuItem> itens = extrairItensMenu(documento);
+        
+        //Verifica se há itens de menu
+        if (itens.isEmpty()) {
             System.out.println("Nenhum item de menu encontrado.");
-            return null;
         }
-
-        List<String> titulos = new ArrayList<>();
-        List<String> links = new ArrayList<>();
-        List<String> idLinks = new ArrayList<>();
-
-        System.out.println("Opções disponíveis (idlink - Título):");
-        for (Element item : itensMenu) {
-            String titulo = item.select("div.menuDte_itemMenu_titulo").text();
-            String idLink = item.attr("idlink");
-            String href = item.attr("href");
-
-            if (!idLink.isEmpty()) {
-                links.add("https://online.sefaz.am.gov.br/redirect2.asp?id=" + idLink);
-                titulos.add(titulo);
-                idLinks.add(idLink);
-                System.out.println(idLink + " - " + titulo);
-            } else if (!href.isEmpty()) {
-                // Para as opções sem idlink, gere um id "pseudo" para permitir seleção, se necessário
-                // Se não quiser permitir seleção sem idlink, apenas ignore este bloco
-                if (!href.startsWith("http")) {
-                    href = BASE_URL + href;
-                }
-                links.add(href);
-                titulos.add(titulo);
-                idLinks.add(""); // idlink vazio para manter indices alinhados
-                System.out.println("(sem idlink) - " + titulo);
-            }
-        }
-
+    
+        //Imprime as opções do menu
+        imprimirOpcoes(itens);
+    
+        //Solicita ao usuário que escolha uma opção
         System.out.print("Escolha uma opção informando o idlink: ");
         String escolhaIdLink = scanner.nextLine().trim();
-        int idxEscolhido = -1;
 
-        // Encontrar pelo idlink informado
-        for (int i = 0; i < idLinks.size(); i++) {
-            if (escolhaIdLink.equals(idLinks.get(i))) {
-                idxEscolhido = i;
-                break;
-            }
-        }
+        //Processa a escolha do usuário
+        processarEscolha(itens, escolhaIdLink);
 
-        if (idxEscolhido != -1) {
-            String urlEscolhida = links.get(idxEscolhido);
-            System.out.println("Navegando para: " + titulos.get(idxEscolhido));
-            try {
-                Document proximaPagina = getPagina(urlEscolhida);
-                System.out.println("Página acessada: " + proximaPagina.title());
-                return idxEscolhido;
-            } catch (Exception e) {
-                System.out.println("Erro ao acessar opção: " + e.getMessage());
-                return null;
+        //Executa a ação escolhida pelo usuário
+        switch (escolhaIdLink) {
+            //Caso a opção escolhida seja a de baixar as NF-e, NFC-e e CT-e
+            case "42" -> {
+                BaixarNFEAM baixarNFEAM = new BaixarNFEAM(certificadoEscolhido, getCookieManager());
+                baixarNFEAM.acessarSite();
             }
-        } else {
-            System.out.println("idlink não encontrado entre as opções.");
-            return null;
         }
     }
-
+    
+    // --- Funções Auxiliares para extrair itens do exibirMenu ---
+    /**
+     * Função que extrai os itens do menu da página e retorna uma lista de MenuItem.
+     */
+    private List<MenuItem> extrairItensMenu(Document documento) {
+        Elements elements = documento.select("div.menuDte_itemMenu");
+        List<MenuItem> itens = new ArrayList<>();
+    
+        for (Element el : elements) {
+            String titulo = el.select("div.menuDte_itemMenu_titulo").text();
+            String idLink = el.attr("idlink");
+            String href = el.attr("href");
+            String urlFinal = "";
+    
+            if (!idLink.isEmpty()) {
+                urlFinal = "https://online.sefaz.am.gov.br/redirect2.asp?id=" + idLink;
+            } else if (!href.isEmpty()) {
+                urlFinal = href.startsWith("http") ? href : BASE_URL + href;
+            }
+    
+            if (!urlFinal.isEmpty()) {
+                itens.add(new MenuItem(titulo, urlFinal, idLink));
+            }
+        }
+        return itens;
+    }
+    
+    /**
+     * Imprime as opções do menu.
+     */
+    private void imprimirOpcoes(List<MenuItem> itens) {
+        System.out.println("Opções disponíveis (idlink - Título):");
+        for (MenuItem item : itens) {
+            String label = item.idLink.isEmpty() ? "(sem idlink)" : item.idLink;
+            System.out.println(label + " - " + item.titulo);
+        }
+    }
+    
+    /**
+     * Processa a escolha do usuário.
+     */
+    private Document processarEscolha(List<MenuItem> itens, String idEscolhido) {
+        for (int i = 0; i < itens.size(); i++) {
+            MenuItem item = itens.get(i);
+            if (idEscolhido.equals(item.idLink)) {
+                return realizarNavegacaoSegura(item.url, item.titulo);
+            }
+        }
+        System.out.println("idlink não encontrado.");
+        return null;
+    }
+    
     /**
      * Processa a listagem de filiais (inscrições) encontradas na página.
      */
-    private void processarFiliais(Document documento) {
+    private Document processarFiliais(Document documento) {
         Elements linhasFiliais = documento.select("table.dg_table tbody tr");
         int qtdInscricoes = linhasFiliais.size();
         System.out.println("Encontradas " + qtdInscricoes + " inscrições.");
@@ -134,10 +155,10 @@ public class SiteSefazAM extends WebScrapping {
         for (Element linha : linhasFiliais) {
             Elements colunas = linha.select("td");
             if (colunas.size() > 2) {
-                // Coluna 1: CNPJ
+                
                 String cnpj = colunas.get(1).text();
                 // Coluna 2: Link (Inscrição Estadual)
-                Element linkElement = colunas.get(2).selectFirst("a");
+                Element linkInscricaoEstadual = colunas.get(2).selectFirst("a");
                 
                 String situacao = "";
                 // Coluna 3: Situação (se existir)
@@ -145,9 +166,9 @@ public class SiteSefazAM extends WebScrapping {
                     situacao = colunas.get(3).text();
                 }
 
-                if (linkElement != null) {
-                    String inscricaoEstadual = linkElement.text();
-                    String href = linkElement.attr("href");
+                if (linkInscricaoEstadual != null) {
+                    String inscricaoEstadual = linkInscricaoEstadual.text();
+                    String href = linkInscricaoEstadual.attr("href");
                     links.add(href);
                     
                     StringBuilder sb = new StringBuilder();
@@ -165,16 +186,18 @@ public class SiteSefazAM extends WebScrapping {
         }
 
         if (links.isEmpty()) {
-            System.out.println("Nenhum link de inscrição encontrado.");
-            return;
+            System.out.println("Nenhum link de inscrição estadual encontrado.");
+            return null;
         }
 
         int escolha = obterEscolhaDoUsuario(links.size());
         if (escolha == -1) {
             System.out.println("Entrada inválida. Por favor, digite um número.");
-            return;
+            return null;
         }
-        navegarParaLinkEscolhido(links, escolha);
+
+        //Realiza a navegação para a URL escolhida pelo usuário
+        return realizarNavegacaoSegura(links.get(escolha - 1), "Inscrição " + escolha);
     }
 
     /**
@@ -199,23 +222,31 @@ public class SiteSefazAM extends WebScrapping {
     /**
      * Faz a navegação para a URL escolhida pelo usuário.
      */
-    private void navegarParaLinkEscolhido(List<String> links, int escolha) {
-        String urlEscolhida = links.get(escolha - 1);
-        if (!urlEscolhida.startsWith("http")) {
-            urlEscolhida = BASE_URL + urlEscolhida;
-        }
-        System.out.println("Navegando para: " + urlEscolhida);
-
+    private Document realizarNavegacaoSegura(String url, String nomeDestino) {
         try {
-            Document proximaPagina = getPagina(urlEscolhida);
-            System.out.println("Página acessada com sucesso!");
-            System.out.println("Título da nova página: " + proximaPagina.title());
-            
-            // Exibe o menu de opções da página principal
-            exibirMenu(proximaPagina);
-            
+            String urlFormatada = url.startsWith("http") ? url : BASE_URL + url;
+            System.out.println("Navegando para: " + nomeDestino);
+            Document doc = getPagina(urlFormatada);
+            System.out.println("Sucesso: " + doc.title());
+            return doc;
         } catch (Exception e) {
-            System.out.println("Erro ao acessar a página: " + e.getMessage());
+            System.err.println("Erro ao acessar [" + nomeDestino + "]: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Classe que representa um item do menu.
+     */
+    private class MenuItem {
+        String titulo;
+        String url;
+        String idLink;
+    
+        public MenuItem(String titulo, String url, String idLink) {
+            this.titulo = titulo;
+            this.url = url;
+            this.idLink = idLink;
         }
     }
 }
