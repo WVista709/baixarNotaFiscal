@@ -150,9 +150,7 @@ public abstract class WebScrapping {
         }
 
         if (x509KeyManager == null) {
-            throw new Exception("ERRO no sslContext: Gerenciador de certificados X509 não encontrado.");
-        } else {
-            System.out.println(mensagem + "Gerenciador de certificados X509 encontrado.");
+            throw new Exception(mensagem + "Gerenciador de certificados X509 não encontrado.");
         }
 
         SelecionadorDeCertificado seletorFixo = new SelecionadorDeCertificado(

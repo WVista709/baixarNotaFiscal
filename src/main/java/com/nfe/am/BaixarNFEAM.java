@@ -1,11 +1,18 @@
 package com.nfe.am;
 
+import java.io.IOException;
 import java.net.CookieManager;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -196,14 +203,88 @@ public class BaixarNFEAM extends WebScrapping {
             
             byte[] arquivoZip = postPaginaBytes(URL_DOWNLOAD, sb.toString());
             
-            String nomeArquivo = "notas_modelo_" + modelo + "_pag" + pagina + ".zip";
-            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(nomeArquivo)) {
-                fos.write(arquivoZip);
-            }
-            
-            System.out.println("Sucesso! Arquivo salvo como: " + nomeArquivo);
+            Path pastaTMP = Paths.get("tmp");
+            Files.createDirectories(pastaTMP);
+
+            Path criandoZipTMP = pastaTMP.resolve("notas_modelo_" + modelo + "_pag" + pagina + ".zip");
+            Files.write(criandoZipTMP, arquivoZip);
         }
+        
         System.out.println("Download finalizado para esta consulta!\n");
+
+        // 1. Cria a pasta final com o nome da empresa
+        Path pastaFinal = Path.of(certificadoEscolhido.getNomeEmpresa() + "-" + certificadoEscolhido.getCnpj());
+        Files.createDirectories(pastaFinal);
+
+        // 2. Define o NOME DO ARQUIVO ZIP dentro dessa pasta final
+        Path arquivoZipFinal = pastaFinal.resolve("NFEs_Unificadas_" + modelo + ".zip");
+
+        // 3. Passa a pasta temporária (origem) e o ARQUIVO final (destino)
+        unificarZipsModerno(Path.of("tmp"), arquivoZipFinal);
+        
+        // 4. (Opcional) Apaga a pasta "tmp" no final, já que ela estará vazia
+        Files.deleteIfExists(Path.of("tmp"));
+
+        System.out.println("Consulta e download finalizados com sucesso!\n");
+    }
+
+    /**
+     * Unifica os Zips usando a API moderna NIO.2 (Zip File System)
+     */
+    private void unificarZipsModerno(Path pastaOrigem, Path arquivoZipFinal) throws Exception {
+        System.out.println("Unificando todos os XMLs em um único arquivo...");
+
+        // Configuração do Java 11+ (Map.of) para criar o ZIP final se não existir
+        Map<String, String> propriedades = Map.of("create", "true");
+        
+        // No NIO.2, tratamos o ZIP como um sistema de arquivos acessado via URI "jar:file:..."
+        URI uriZipFinal = URI.create("jar:" + arquivoZipFinal.toUri().toString());
+
+        // Abre (ou cria) o ZIP final como uma "pasta virtual"
+        try (FileSystem zipFinalFS = FileSystems.newFileSystem(uriZipFinal, propriedades)) {
+
+            // Lê todos os zips parciais da pasta
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(pastaOrigem, "*.zip")) {
+                for (Path zipParcial : stream) {
+                    
+                    // Proteção: não processar o zip final caso ele tenha sido salvo na mesma pasta
+                    if (zipParcial.equals(arquivoZipFinal)) continue;
+
+                    URI uriZipParcial = URI.create("jar:" + zipParcial.toUri().toString());
+
+                    // Abre o ZIP parcial como outra "pasta virtual" (somente leitura)
+                    try (FileSystem zipParcialFS = FileSystems.newFileSystem(uriZipParcial, Map.of())) {
+                        
+                        // Pega a raiz ("/") do ZIP parcial
+                        Path raizZipParcial = zipParcialFS.getPath("/");
+
+                        // Varre todos os arquivos lá dentro usando Streams do Java 8+
+                        Files.walk(raizZipParcial)
+                             .filter(Files::isRegularFile)
+                             .filter(p -> p.toString().toLowerCase().endsWith(".xml"))
+                             .forEach(arquivoXml -> {
+                                 try {
+                                     // Pega apenas o nome do arquivo (ex: nota.xml)
+                                     String nomeArquivo = arquivoXml.getFileName().toString();
+                                     
+                                     // Define o destino na raiz do ZIP final
+                                     Path destinoXml = zipFinalFS.getPath("/" + nomeArquivo);
+                                     
+                                     // Copia de um ZIP para o outro, se ainda não existir
+                                     if (Files.notExists(destinoXml)) {
+                                         Files.copy(arquivoXml, destinoXml);
+                                     }
+                                 } catch (IOException e) {
+                                     System.err.println("Erro ao copiar XML: " + e.getMessage());
+                                 }
+                             });
+                    }
+                    // Opcional: Apaga o ZIP parcial após extrair os dados
+                    Files.deleteIfExists(zipParcial);
+                }
+            }
+        }
+        System.out.println("Unificação concluída! ZIP final gerado em: " + arquivoZipFinal.toAbsolutePath());
     }
 
     // Método que faz o POST e retorna um array de bytes (necessário para baixar arquivos ZIP)
