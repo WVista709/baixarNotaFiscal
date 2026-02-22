@@ -33,6 +33,7 @@ public class BaixarNFEAM extends WebScrapping {
     private static final String URL_PAGINACAO = "http://sistemas.sefaz.am.gov.br/nfe-consulta-ex/exibirListaXML.do?acao=paginarConsultaArquivo";
     private static final String URL_DOWNLOAD = "http://sistemas.sefaz.am.gov.br/nfe-consulta-ex/exibirListaXML.do?acao=download";
 
+    @SuppressWarnings("FieldMayBeFinal")
     private Scanner scanner;
 
     /**
@@ -48,78 +49,119 @@ public class BaixarNFEAM extends WebScrapping {
      */
     @Override
     public void acessarSite() throws Exception {
-        int opcao = -1;
-        
-        while (opcao != 0) {
-            //Exibe o menu de opções
-            menu();
+        while (true) {
+            // --- PASSO 1: ORIGEM ---
+            menu(); // Chama a sua função de menu principal
             
-            //Verifica se o usuário digitou um número inteiro
-            if (scanner.hasNextInt()) {
-                opcao = scanner.nextInt();
-                scanner.nextLine();
- 
-                if (opcao == 0) {
-                    System.out.println("Encerrando...");
-                    break;
-                } else if (opcao < 1 || opcao > 9) {
-                    System.out.println("Opção inválida. Tente novamente.\n");
-                    continue;
-                }
-
-                System.out.println("\n--- Período da Consulta ---");
-                System.out.print("Digite a data de INÍCIO (ex: 01/01/2026): ");
-                String dataInicio = scanner.nextLine();
-                
-                System.out.print("Digite a data de FIM (ex: 31/01/2026): ");
-                String dataFim = scanner.nextLine();
-
-                System.out.println("\nIniciando busca para o período de " + dataInicio + " até " + dataFim + "...");
-
-                // Mapeia a escolha do usuário repassando as datas digitadas
-                switch (opcao) {
-                    case 1 -> // NF-e Autorizadas (Modelo 55)
-                        consultarEBaixarNFE("55", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "AUTORIZADAS", "TODAS", "", "", "");
-                    case 2 -> // NF-e Canceladas
-                        consultarEBaixarNFE("55", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "CANCELADAS", "TODAS", "", "", "");
-                    case 3 -> // NF-e TODAS
-                        consultarEBaixarNFE("55", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "TODAS", "TODAS", "", "", "");
-                    case 4 -> // NFC-e Autorizadas (Modelo 65)
-                        consultarEBaixarNFE("65", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "AUTORIZADAS", "TODAS", "", "", "");
-                    case 5 -> // NFC-e Canceladas
-                        consultarEBaixarNFE("65", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "CANCELADAS", "TODAS", "", "", "");
-                    case 6 -> // NFC-e TODAS
-                        consultarEBaixarNFE("65", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "TODAS", "TODAS", "", "", "");
-                    case 7 -> // CT-e Autorizadas (Modelo 57)
-                        consultarEBaixarNFE("57", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "AUTORIZADAS", "TODAS", "", "", "");
-                    case 8 -> // CT-e Canceladas
-                        consultarEBaixarNFE("57", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "CANCELADAS", "TODAS", "", "", "");
-                    case 9 -> // CT-e TODAS
-                        consultarEBaixarNFE("57", "", "", "", dataInicio, dataFim, "", "EMITIDAS", "TODAS", "TODAS", "", "", "");
-                }
-            } else {
-                System.out.println("Entrada inválida. Digite um número.\n");
-                scanner.next();
+            int opOrigem = lerInteiro();
+            if (opOrigem == 0) {
+                System.out.println("Encerrando o módulo de download...");
+                break;
             }
+            if (opOrigem < 1 || opOrigem > 2) {
+                System.out.println("Opção inválida! Tente novamente.");
+                continue;
+            }
+            String origemStr = (opOrigem == 1) ? "EMITIDAS" : "RECEBIDAS";
+
+            // --- PASSO 2: TIPO (MODELO) ---
+            menuModelo();
+            
+            int opModelo = lerInteiro();
+            if (opModelo == 0) continue;
+            if (opModelo < 1 || opModelo > 3) {
+                System.out.println("Opção inválida!");
+                continue;
+            }
+            String modeloStr = switch (opModelo) {
+                case 1 -> "55";
+                case 2 -> "65";
+                case 3 -> "57";
+                default -> "55";
+            };
+
+            // --- PASSO 3: SITUAÇÃO ---
+            menuSituacao();
+            
+            int opSituacao = lerInteiro();
+            if (opSituacao == 0) continue;
+            if (opSituacao < 1 || opSituacao > 3) {
+                System.out.println("Opção inválida!");
+                continue;
+            }
+            String situacaoStr = switch (opSituacao) {
+                case 1 -> "AUTORIZADAS";
+                case 2 -> "CANCELADAS";
+                case 3 -> "TODAS";
+                default -> "TODAS";
+            };
+
+            // --- PASSO 4: DATAS ---
+            System.out.println("\n--- 4. PERÍODO DA CONSULTA ---");
+            System.out.print("Digite a data de INÍCIO (ex: 01/01/2026): ");
+            String dataInicio = scanner.nextLine().trim();
+            
+            System.out.print("Digite a data de FIM (ex: 31/01/2026): ");
+            String dataFim = scanner.nextLine().trim();
+
+            // --- PASSO 5: EXECUÇÃO ---
+            System.out.printf("\nIniciando busca: Origem=%s, Modelo=%s, Situação=%s, Período=%s a %s...\n", 
+                              origemStr, modeloStr, situacaoStr, dataInicio, dataFim);
+            
+            consultarEBaixarNFE(modeloStr, "", "", "", dataInicio, dataFim, "", origemStr, situacaoStr, "TODAS", "", "", "");
         }
     }
 
     /**
-     * Função que exibe o menu de opções.
-     */
+         * Função que exibe o menu principal (Origem dos Documentos).
+         */
     private void menu() {
-        System.out.println("\n--- MENU DE DOWNLOAD SEFAZ-AM ---");
-        System.out.println("1 - Baixar NF-e Autorizadas");
-        System.out.println("2 - Baixar NF-e Canceladas");
-        System.out.println("3 - Baixar NF-e TODAS");
-        System.out.println("4 - Baixar NFC-e Autorizadas");
-        System.out.println("5 - Baixar NFC-e Canceladas");
-        System.out.println("6 - Baixar NFC-e TODAS");
-        System.out.println("7 - Baixar CT-e Autorizadas");
-        System.out.println("8 - Baixar CT-e Canceladas");
-        System.out.println("9 - Baixar CT-e TODAS");
+        System.out.println("\n==================================");
+        System.out.println("     DOWNLOAD SEFAZ-AM (XML)      ");
+        System.out.println("==================================");
+        System.out.println("\n--- 1. ORIGEM DOS DOCUMENTOS ---");
+        System.out.println("1 - Emitidas");
+        System.out.println("2 - Recebidas");
         System.out.println("0 - Sair");
-        System.out.print("Escolha uma opção: ");
+        System.out.print("Escolha a origem: ");
+    }
+
+    /**
+     * Função que exibe o submenu de Modelos.
+     */
+    private void menuModelo() {
+        System.out.println("\n--- 2. TIPO DE DOCUMENTO ---");
+        System.out.println("1 - NF-e (Modelo 55)");
+        System.out.println("2 - NFC-e (Modelo 65)");
+        System.out.println("3 - CT-e (Modelo 57)");
+        System.out.println("0 - Voltar/Cancelar");
+        System.out.print("Escolha o tipo: ");
+    }
+
+    /**
+     * Função que exibe o submenu de Situação.
+     */
+    private void menuSituacao() {
+        System.out.println("\n--- 3. SITUAÇÃO DO DOCUMENTO ---");
+        System.out.println("1 - Autorizadas");
+        System.out.println("2 - Canceladas");
+        System.out.println("3 - Todas");
+        System.out.println("0 - Voltar/Cancelar");
+        System.out.print("Escolha a situação: ");
+    }
+
+    /**
+     * Método auxiliar para ler opções numéricas de forma segura sem dar crash
+     */
+    private int lerInteiro() {
+        if (scanner.hasNextInt()) {
+            int valor = scanner.nextInt();
+            scanner.nextLine(); // Consome a quebra de linha do Enter
+            return valor;
+        } else {
+            scanner.nextLine(); // Limpa o texto inválido que o usuário digitou
+            return -1;
+        }
     }
 
     /**
@@ -210,14 +252,18 @@ public class BaixarNFEAM extends WebScrapping {
             Files.write(criandoZipTMP, arquivoZip);
         }
         
-        System.out.println("Download finalizado para esta consulta!\n");
-
         // 1. Cria a pasta final com o nome da empresa
         Path pastaFinal = Path.of(certificadoEscolhido.getNomeEmpresa() + "-" + certificadoEscolhido.getCnpj());
         Files.createDirectories(pastaFinal);
 
         // 2. Define o NOME DO ARQUIVO ZIP dentro dessa pasta final
-        Path arquivoZipFinal = pastaFinal.resolve("NFEs_Unificadas_" + modelo + ".zip");
+        MenuItem menuItem = new MenuItem(modelo, emitidasPeriodoDe, emitidasPeriodoAte, origemNFe, situacaoNFe);
+        Path arquivoZipFinal = pastaFinal.resolve(menuItem.getOrigemNFe() 
+        + "_" + menuItem.getSituacaoNFe() 
+        + "_" + menuItem.getModelo() 
+        + "_" + menuItem.getEmitidasPeriodoDe() 
+        + "_" + menuItem.getEmitidasPeriodoAte() 
+        + ".zip");
 
         // 3. Passa a pasta temporária (origem) e o ARQUIVO final (destino)
         unificarZipsModerno(Path.of("tmp"), arquivoZipFinal);
@@ -304,5 +350,61 @@ public class BaixarNFEAM extends WebScrapping {
         }
     
         return response.body();
+    }
+
+    private class MenuItem {
+        @SuppressWarnings("FieldMayBeFinal")
+        private String modelo;
+        @SuppressWarnings("FieldMayBeFinal")
+        private String emitidasPeriodoDe;
+        @SuppressWarnings("FieldMayBeFinal")
+        private String emitidasPeriodoAte;
+        @SuppressWarnings("FieldMayBeFinal")
+        private String origemNFe;
+        @SuppressWarnings("FieldMayBeFinal")
+        private String situacaoNFe;
+
+        public MenuItem(String modelo, String emitidasPeriodoDe, String emitidasPeriodoAte, String origemNFe, String situacaoNFe) {
+            this.modelo = modelo;
+            this.emitidasPeriodoDe = emitidasPeriodoDe;
+            this.emitidasPeriodoAte = emitidasPeriodoAte;
+            this.origemNFe = origemNFe;
+            this.situacaoNFe = situacaoNFe;
+        }
+
+        public String getModelo() {
+            return switch (this.modelo) {
+                case "55" -> "NF-e";
+                case "65" -> "NFC-e";
+                case "57" -> "CT-e";
+                default -> "Modelo_invalido";
+            };
+        }
+
+        public String getEmitidasPeriodoDe() {
+            // Substitui as barras por traços para não quebrar o caminho do arquivo no Windows/Linux
+            return this.emitidasPeriodoDe.replace("/", "-");
+        }
+
+        public String getEmitidasPeriodoAte() {
+            return this.emitidasPeriodoAte.replace("/", "-");
+        }
+
+        public String getOrigemNFe() {
+            return switch (this.origemNFe) {
+                case "EMITIDAS" -> "Emitidas";
+                case "RECEBIDAS" -> "Recebidas";
+                default -> "Origem_invalida";
+            };
+        }
+
+        public String getSituacaoNFe() {
+            return switch (this.situacaoNFe) {
+                case "AUTORIZADAS" -> "Autorizadas";
+                case "CANCELADAS" -> "Canceladas";
+                case "TODAS" -> "Todas";
+                default -> "Situacao_invalida";
+            };
+        }
     }
 }

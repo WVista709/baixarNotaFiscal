@@ -63,12 +63,12 @@ public abstract class WebScrapping {
     /**
      * Função abstrata para executar a rotina de scraping.
      */
-    public abstract void acessarSite() throws Exception;
+    protected abstract void acessarSite() throws Exception;
 
     /**
      * Função que gera um arquivo TXT com o conteúdo do documento HTML.
      */
-    public void gerarTXT(Document documento, String nomeArquivo) throws Exception {
+    protected void gerarTXT(Document documento, String nomeArquivo) throws Exception {
         String mensagem = "ERRO no gerarTXT: ";
         if (nomeArquivo.isEmpty()) {
             throw new Exception(mensagem + "Nome do arquivo não pode ser vazio");
@@ -88,7 +88,7 @@ public abstract class WebScrapping {
     /**
      * Função genérica para fazer GET e retornar o HTML já parseado pelo Jsoup.
      */
-    public Document getPagina(String url) throws Exception {
+    protected Document getPagina(String url) throws Exception {
         String mensagem = "ERRO no getPagina: ";
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -109,7 +109,7 @@ public abstract class WebScrapping {
     /**
      * Método genérico para fazer POST e retornar o HTML já parseado pelo Jsoup
      */
-    public Document postPagina(String url, String parametros) throws Exception {
+    protected Document postPagina(String url, String parametros) throws Exception {
         String mensagem = "ERRO no postPagina: ";
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(url))
@@ -172,7 +172,7 @@ public abstract class WebScrapping {
         return this.cookieManager;
     }
 
-    public CertificadoEscolhido getCertificadoEscolhido() {
+    protected CertificadoEscolhido getCertificadoEscolhido() {
         return certificadoEscolhido;
     }
 
