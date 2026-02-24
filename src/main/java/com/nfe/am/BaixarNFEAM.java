@@ -32,6 +32,7 @@ public class BaixarNFEAM extends WebScrapping {
     private static final String URL_CONSULTA = "http://sistemas.sefaz.am.gov.br/nfe-consulta-ex/exibirListaXML.do?acao=submitConsultaXML";
     private static final String URL_PAGINACAO = "http://sistemas.sefaz.am.gov.br/nfe-consulta-ex/exibirListaXML.do?acao=paginarConsultaArquivo";
     private static final String URL_DOWNLOAD = "http://sistemas.sefaz.am.gov.br/nfe-consulta-ex/exibirListaXML.do?acao=download";
+    private static final String URL_EXPORTAR = "http://sistemas.sefaz.am.gov.br/nfe-consulta-ex/exibirListaXML.do?acao=exportar";
 
     @SuppressWarnings("FieldMayBeFinal")
     private Scanner scanner;
@@ -104,17 +105,34 @@ public class BaixarNFEAM extends WebScrapping {
             System.out.print("Digite a data de FIM (ex: 31/01/2026): ");
             String dataFim = scanner.nextLine().trim();
 
-            // --- PASSO 5: EXECUÇÃO ---
-            System.out.printf("\nIniciando busca: Origem=%s, Modelo=%s, Situação=%s, Período=%s a %s...\n", 
+            // --- PASSO 5: FORMATO DE DOWNLOAD ---
+            menuFormato();
+            
+            int opFormato = lerInteiro();
+            if (opFormato < 1 || opFormato > 3) {
+                System.out.println("Opção inválida, assumindo 'Ambos' (Opção 3).");
+                opFormato = 3;
+            }
+
+            // --- PASSO 6: EXECUÇÃO ---
+            System.out.printf("\nIniciando processamento: Origem=%s, Modelo=%s, Situação=%s, Período=%s a %s...\n", 
                               origemStr, modeloStr, situacaoStr, dataInicio, dataFim);
             
-            consultarEBaixarNFE(modeloStr, "", "", "", dataInicio, dataFim, "", origemStr, situacaoStr, "TODAS", "", "", "");
+            // Executa o CSV se o usuário escolheu 1 ou 3
+            if (opFormato == 1 || opFormato == 3) {
+                baixarCSV(modeloStr, dataInicio, dataFim, origemStr, situacaoStr);
+            }
+            
+            // Executa o XML se o usuário escolheu 2 ou 3
+            if (opFormato == 2 || opFormato == 3) {
+                consultarEBaixarNFE(modeloStr, "", "", "", dataInicio, dataFim, "", origemStr, situacaoStr, "TODAS", "", "", "");
+            }
         }
     }
 
     /**
-         * Função que exibe o menu principal (Origem dos Documentos).
-         */
+     * Função que exibe o menu principal (Origem dos Documentos).
+     */
     private void menu() {
         System.out.println("\n==================================");
         System.out.println("     DOWNLOAD SEFAZ-AM (XML)      ");
@@ -124,6 +142,17 @@ public class BaixarNFEAM extends WebScrapping {
         System.out.println("2 - Recebidas");
         System.out.println("0 - Sair");
         System.out.print("Escolha a origem: ");
+    }
+
+    /**
+     * Função que exibe o submenu de Formato de Download.
+     */
+    private void menuFormato() {
+        System.out.println("\n--- 5. FORMATO DE DOWNLOAD ---");
+        System.out.println("1 - Apenas Relatório (CSV)");
+        System.out.println("2 - Apenas Notas Fiscais (XML em ZIP)");
+        System.out.println("3 - Ambos (CSV e XML)");
+        System.out.print("Escolha uma opção: ");
     }
 
     /**
@@ -164,6 +193,60 @@ public class BaixarNFEAM extends WebScrapping {
         }
     }
 
+    /**
+     * Faz o download do relatório em formato CSV da consulta atual gravada na sessão.
+     */
+    private Path baixarCSV(String modelo, String emitidasPeriodoDe, String emitidasPeriodoAte, String origemNFe, String situacaoNFe) throws Exception {
+        System.out.println("\nPreparando consulta para exportação do CSV...");
+        
+        // 1. Prepara a consulta para a Sefaz (mesmo payload usado na busca de XML)
+        Map<String, String> formData = new HashMap<>();
+        formData.put("modelo", modelo); 
+        formData.put("serie", "");
+        formData.put("numero", "");
+        formData.put("cfop", "");
+        formData.put("emitidasPeriodoDe", emitidasPeriodoDe); 
+        formData.put("emitidasPeriodoAte", emitidasPeriodoAte); 
+        formData.put("codUf", "");
+        formData.put("origemNFe", origemNFe); 
+        formData.put("situacaoNFe", situacaoNFe); 
+        formData.put("notaRejeitada", "TODAS");
+        formData.put("cnpjRemetente", "");
+        formData.put("cnpjCpfDestinatario", "");
+        formData.put("cnpjTomador", "");
+
+        String formUrlEncoded = formData.entrySet().stream()
+            .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "=" +
+                          URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
+            .collect(Collectors.joining("&"));
+        
+        // 2. Faz o POST inicial para a Sefaz registrar a busca na sessão
+        postPagina(URL_CONSULTA, formUrlEncoded);
+
+        // 3. Agora sim, faz o POST pedindo o CSV dessa busca!
+        System.out.println("Solicitando arquivo CSV ao servidor...");
+        byte[] arquivoCsv = postPaginaBytes(URL_EXPORTAR, "d-49612-p=");
+
+        // 4. Cria a pasta final com o nome da empresa
+        Path pastaFinal = Path.of(certificadoEscolhido.getNomeEmpresa() + "-" + certificadoEscolhido.getCnpj());
+        Files.createDirectories(pastaFinal);
+
+        // 5. Define o NOME DO ARQUIVO CSV
+        MenuItem menuItem = new MenuItem(modelo, emitidasPeriodoDe, emitidasPeriodoAte, origemNFe, situacaoNFe);
+        Path arquivoCsvFinal = pastaFinal.resolve(menuItem.getOrigemNFe() 
+                + "_" + menuItem.getSituacaoNFe() 
+                + "_" + menuItem.getModelo() 
+                + "_" + menuItem.getEmitidasPeriodoDe() 
+                + "_" + menuItem.getEmitidasPeriodoAte() 
+                + ".csv");
+
+        // 6. Grava no disco
+        Files.write(arquivoCsvFinal, arquivoCsv);
+        System.out.println(">>> SUCESSO! Relatório CSV salvo em: " + arquivoCsvFinal.toAbsolutePath());
+        
+        return arquivoCsvFinal;
+    }
+    
     /**
      * Função que realiza a consulta e baixa as NF-e, NFC-e e CT-e.
      */
