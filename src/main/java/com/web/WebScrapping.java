@@ -26,9 +26,10 @@ public abstract class WebScrapping {
     protected KeyManagerFactory kmf;
     protected SSLContext sslContext;
     protected CookieManager cookieManager;
+    protected HttpClient.Version versaoHttp = HttpClient.Version.HTTP_2;
 
     /*
-     * Construtor que recebe o certificado escolhido e inicializa o cliente HTTP.
+     * Construtor que recebe o certificado escolhido e inicializa o cliente HTTP, serve para quando inicializar o uso do certificado escolhido no site.
      */
     public WebScrapping(CertificadoEscolhido certificadoEscolhido) throws Exception {
         this.certificadoEscolhido = certificadoEscolhido;
@@ -38,8 +39,20 @@ public abstract class WebScrapping {
         inicializarCliente();
     }
 
+    /*
+     * Construtor que recebe o certificado escolhido e a versão HTTP, serve para quando inicializar o uso do certificado escolhido no site com a versão HTTP específica.
+     */
+    public WebScrapping(CertificadoEscolhido certificadoEscolhido, HttpClient.Version versaoHttp) throws Exception {
+        this.certificadoEscolhido = certificadoEscolhido;
+        this.versaoHttp = versaoHttp;
+        this.kmf = kmf();
+        this.sslContext = sslContext();
+        this.cookieManager = cookieManager();
+        inicializarCliente();
+    }
+    
     /**
-     * Construtor que recebe o certificado escolhido e o cookie manager existente caso seja necessário.
+     * Construtor que recebe o certificado escolhido e o cookie manager existente caso seja necessário, serve para continuar a sessão do certificado escolhido no site.
      */
     public WebScrapping(CertificadoEscolhido certificadoEscolhido, CookieManager cookieManagerExistente) throws Exception {
         this.certificadoEscolhido = certificadoEscolhido;
@@ -55,6 +68,7 @@ public abstract class WebScrapping {
     private void inicializarCliente() throws Exception{
         this.cliente = HttpClient.newBuilder()
             .sslContext(sslContext)
+            .version(this.versaoHttp)
             .cookieHandler(cookieManager)
             .followRedirects(Redirect.ALWAYS)
             .build();
