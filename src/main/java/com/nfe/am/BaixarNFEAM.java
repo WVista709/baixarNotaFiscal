@@ -50,6 +50,14 @@ public class BaixarNFEAM extends WebScrapping {
      */
     @Override
     public void acessarSite() throws Exception {
+        //É apenas a forma de usar o sistema pelo terminal
+        menuPrincipal();
+    }
+
+    /**
+     * Função para ser usada com terminal para baixar as NF-e, NFC-e e CT-e
+     */
+    private void menuPrincipal() throws Exception {
         while (true) {
             // --- PASSO 1: ORIGEM ---
             menu(); // Chama a sua função de menu principal
@@ -120,7 +128,7 @@ public class BaixarNFEAM extends WebScrapping {
             
             // Executa o CSV se o usuário escolheu 1 ou 3
             if (opFormato == 1 || opFormato == 3) {
-                baixarCSV(modeloStr, dataInicio, dataFim, origemStr, situacaoStr);
+                baixarCSV(modeloStr, "", "", "", dataInicio, dataFim, "", origemStr, situacaoStr, "TODAS", "", "", "");
             }
             
             // Executa o XML se o usuário escolheu 2 ou 3
@@ -196,29 +204,17 @@ public class BaixarNFEAM extends WebScrapping {
     /**
      * Faz o download do relatório em formato CSV da consulta atual gravada na sessão.
      */
-    private Path baixarCSV(String modelo, String emitidasPeriodoDe, String emitidasPeriodoAte, String origemNFe, String situacaoNFe) throws Exception {
+    private Path baixarCSV(String modelo, String serie, String numero, String cfop, 
+        String emitidasPeriodoDe, String emitidasPeriodoAte, String codUf, String origemNFe, 
+        String situacaoNFe, String notaRejeitada, String cnpjRemetente, String cnpjCpfDestinatario, 
+        String cnpjTomador) throws Exception {
+        
         System.out.println("\nPreparando consulta para exportação do CSV...");
         
         // 1. Prepara a consulta para a Sefaz (mesmo payload usado na busca de XML)
-        Map<String, String> formData = new HashMap<>();
-        formData.put("modelo", modelo); 
-        formData.put("serie", "");
-        formData.put("numero", "");
-        formData.put("cfop", "");
-        formData.put("emitidasPeriodoDe", emitidasPeriodoDe); 
-        formData.put("emitidasPeriodoAte", emitidasPeriodoAte); 
-        formData.put("codUf", "");
-        formData.put("origemNFe", origemNFe); 
-        formData.put("situacaoNFe", situacaoNFe); 
-        formData.put("notaRejeitada", "TODAS");
-        formData.put("cnpjRemetente", "");
-        formData.put("cnpjCpfDestinatario", "");
-        formData.put("cnpjTomador", "");
+        Map<String, String> formData = dadosParaHashMap(modelo, serie, numero, cfop, emitidasPeriodoDe, emitidasPeriodoAte, codUf, origemNFe, situacaoNFe, notaRejeitada, cnpjRemetente, cnpjCpfDestinatario, cnpjTomador);
 
-        String formUrlEncoded = formData.entrySet().stream()
-            .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "=" +
-                          URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
-            .collect(Collectors.joining("&"));
+        String formUrlEncoded = dadosParaUrlEncoded(formData);
         
         // 2. Faz o POST inicial para a Sefaz registrar a busca na sessão
         postPagina(URL_CONSULTA, formUrlEncoded);
@@ -255,25 +251,9 @@ public class BaixarNFEAM extends WebScrapping {
         String situacaoNFe, String notaRejeitada, String cnpjRemetente, String cnpjCpfDestinatario, 
         String cnpjTomador) throws Exception {
         
-        Map<String, String> formData = new HashMap<>();
-        formData.put("modelo", modelo); 
-        formData.put("serie", serie);
-        formData.put("numero", numero);
-        formData.put("cfop", cfop);
-        formData.put("emitidasPeriodoDe", emitidasPeriodoDe); 
-        formData.put("emitidasPeriodoAte", emitidasPeriodoAte); 
-        formData.put("codUf", codUf);
-        formData.put("origemNFe", origemNFe); 
-        formData.put("situacaoNFe", situacaoNFe); 
-        formData.put("notaRejeitada", notaRejeitada);
-        formData.put("cnpjRemetente", cnpjRemetente);
-        formData.put("cnpjCpfDestinatario", cnpjCpfDestinatario);
-        formData.put("cnpjTomador", cnpjTomador);
+        Map<String, String> formData = dadosParaHashMap(modelo, serie, numero, cfop, emitidasPeriodoDe, emitidasPeriodoAte, codUf, origemNFe, situacaoNFe, notaRejeitada, cnpjRemetente, cnpjCpfDestinatario, cnpjTomador);
 
-        String formUrlEncoded = formData.entrySet().stream()
-            .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "=" +
-                          URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
-            .collect(Collectors.joining("&"));
+        String formUrlEncoded = dadosParaUrlEncoded(formData);
         
         System.out.println("Realizando consulta inicial na SEFAZ...");
         Document resultado = postPagina(URL_CONSULTA, formUrlEncoded);
@@ -290,6 +270,7 @@ public class BaixarNFEAM extends WebScrapping {
                 }
             }
         }
+
         System.out.println("Total de páginas detectadas: " + totalPaginas);
 
         for (int pagina = 1; pagina <= totalPaginas; pagina++) {
@@ -297,10 +278,7 @@ public class BaixarNFEAM extends WebScrapping {
 
             if (pagina > 1) {
                 formData.put("d-49612-p", String.valueOf(pagina));
-                String formPaginadoEncoded = formData.entrySet().stream()
-                        .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "=" +
-                                      URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
-                        .collect(Collectors.joining("&"));
+                String formPaginadoEncoded = dadosParaUrlEncoded(formData);
                 
                 resultado = postPagina(URL_PAGINACAO, formPaginadoEncoded);
             }
@@ -349,7 +327,7 @@ public class BaixarNFEAM extends WebScrapping {
         + ".zip");
 
         // 3. Passa a pasta temporária (origem) e o ARQUIVO final (destino)
-        unificarZipsModerno(Path.of("tmp"), arquivoZipFinal);
+        unificarZips(Path.of("tmp"), arquivoZipFinal);
         
         // 4. (Opcional) Apaga a pasta "tmp" no final, já que ela estará vazia
         Files.deleteIfExists(Path.of("tmp"));
@@ -358,9 +336,45 @@ public class BaixarNFEAM extends WebScrapping {
     }
 
     /**
-     * Unifica os Zips usando a API moderna NIO.2 (Zip File System)
+     * Para evitar a repitação de código, criamos um método que converte os dados para um HashMap
      */
-    private void unificarZipsModerno(Path pastaOrigem, Path arquivoZipFinal) throws Exception {
+    private Map<String, String> dadosParaHashMap(String modelo, String serie, String numero, String cfop, 
+        String emitidasPeriodoDe, String emitidasPeriodoAte, String codUf, String origemNFe, 
+        String situacaoNFe, String notaRejeitada, String cnpjRemetente, String cnpjCpfDestinatario, 
+        String cnpjTomador) {
+
+        Map<String, String> formData = new HashMap<>();
+        formData.put("modelo", modelo); 
+        formData.put("serie", serie);
+        formData.put("numero", numero);
+        formData.put("cfop", cfop);
+        formData.put("emitidasPeriodoDe", emitidasPeriodoDe); 
+        formData.put("emitidasPeriodoAte", emitidasPeriodoAte); 
+        formData.put("codUf", codUf);
+        formData.put("origemNFe", origemNFe); 
+        formData.put("situacaoNFe", situacaoNFe); 
+        formData.put("notaRejeitada", notaRejeitada);
+        formData.put("cnpjRemetente", cnpjRemetente);
+        formData.put("cnpjCpfDestinatario", cnpjCpfDestinatario);
+        formData.put("cnpjTomador", cnpjTomador);
+
+        return formData;
+    }
+
+    /**
+     * Converte o HashMap para o formato URL Encoded, para evitar a repitação de código
+     */
+    private String dadosParaUrlEncoded(Map<String, String> formData) {
+        return formData.entrySet().stream()
+            .map(entry -> URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8) + "=" +
+                          URLEncoder.encode(entry.getValue(), StandardCharsets.UTF_8))
+            .collect(Collectors.joining("&"));
+    }
+    
+    /**
+     * Unifica os Zips usando a API moderna NIO.2
+     */
+    private void unificarZips(Path pastaOrigem, Path arquivoZipFinal) throws Exception {
         System.out.println("Unificando todos os XMLs em um único arquivo...");
 
         // Configuração do Java 11+ (Map.of) para criar o ZIP final se não existir
