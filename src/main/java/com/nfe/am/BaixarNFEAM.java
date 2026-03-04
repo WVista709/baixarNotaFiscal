@@ -213,11 +213,19 @@ public class BaixarNFEAM extends WebScrapping {
         
         // 1. Prepara a consulta para a Sefaz (mesmo payload usado na busca de XML)
         Map<String, String> formData = dadosParaHashMap(modelo, serie, numero, cfop, emitidasPeriodoDe, emitidasPeriodoAte, codUf, origemNFe, situacaoNFe, notaRejeitada, cnpjRemetente, cnpjCpfDestinatario, cnpjTomador);
-
         String formUrlEncoded = dadosParaUrlEncoded(formData);
         
-        // 2. Faz o POST inicial para a Sefaz registrar a busca na sessão
-        postPagina(URL_CONSULTA, formUrlEncoded);
+        // 2. Faz o POST inicial para a Sefaz registrar a busca na sessão e verifica o retorno
+        Document resultado = postPagina(URL_CONSULTA, formUrlEncoded);
+
+        // --- VERIFICAÇÃO DE MOVIMENTO (NOTAS ENCONTRADAS) ---
+        Elements notasHtmlVerificacao = resultado.select("input[type=checkbox][name=chaves]");
+        if (notasHtmlVerificacao.isEmpty()) {
+            System.out.println(">>> NENHUMA NOTA FISCAL ENCONTRADA PARA O PERÍODO E FILTROS SELECIONADOS.");
+            System.out.println(">>> A exportação do CSV foi cancelada (Nenhum arquivo gerado).");
+            return null; // Encerra o método retornando nulo. Não cria pastas nem faz o POST do CSV.
+        }
+        // ----------------------------------------------------
 
         // 3. Agora sim, faz o POST pedindo o CSV dessa busca!
         System.out.println("Solicitando arquivo CSV ao servidor...");
@@ -252,26 +260,45 @@ public class BaixarNFEAM extends WebScrapping {
         String cnpjTomador) throws Exception {
         
         Map<String, String> formData = dadosParaHashMap(modelo, serie, numero, cfop, emitidasPeriodoDe, emitidasPeriodoAte, codUf, origemNFe, situacaoNFe, notaRejeitada, cnpjRemetente, cnpjCpfDestinatario, cnpjTomador);
-
         String formUrlEncoded = dadosParaUrlEncoded(formData);
         
         System.out.println("Realizando consulta inicial na SEFAZ...");
         Document resultado = postPagina(URL_CONSULTA, formUrlEncoded);
-        gerarTXT(resultado, "BaixarNFE_resultado.txt");
+        
+        // --- VERIFICAÇÃO DE MOVIMENTO (NOTAS ENCONTRADAS) ---
+        Elements notasHtmlVerificacao = resultado.select("input[type=checkbox][name=chaves]");
+        if (notasHtmlVerificacao.isEmpty()) {
+            System.out.println(">>> NENHUMA NOTA FISCAL ENCONTRADA PARA O PERÍODO E FILTROS SELECIONADOS.");
+            System.out.println(">>> O download de XML foi cancelado (Nenhum arquivo gerado).");
+            return; // Encerra o método aqui! Não cria pastas nem baixa zips.
+        }
+        // ----------------------------------------------------
 
         int totalPaginas = 1;
-        Elements linksPaginacao = resultado.select("span.pagelinks a");
-        for (Element link : linksPaginacao) {
-            String titulo = link.attr("title");
-            if (titulo != null && titulo.startsWith("Ir para a página")) {
-                int numPagina = Integer.parseInt(titulo.replaceAll("\\D", ""));
-                if (numPagina > totalPaginas) {
-                    totalPaginas = numPagina;
+        Element spanPaginacao = resultado.selectFirst("span.pagelinks");
+        
+        if (spanPaginacao != null) {
+            Element linkUltimo = spanPaginacao.select("a:contains(Último)").first();
+            if (linkUltimo != null) {
+                String href = linkUltimo.attr("href");
+                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\{f:'d-49612-p',v:'(\\d+)'\\}").matcher(href);
+                if (matcher.find()) {
+                    totalPaginas = Integer.parseInt(matcher.group(1));
+                }
+            } else {
+                Elements links = spanPaginacao.select("a[title^=Ir para a página]");
+                for (Element link : links) {
+                    int numPagina = Integer.parseInt(link.text());
+                    if (numPagina > totalPaginas) {
+                        totalPaginas = numPagina;
+                    }
                 }
             }
         }
 
         System.out.println("Total de páginas detectadas: " + totalPaginas);
+        Path pastaTMP = Paths.get("tmp");
+        Files.createDirectories(pastaTMP);
 
         for (int pagina = 1; pagina <= totalPaginas; pagina++) {
             System.out.println("--- Processando página " + pagina + " de " + totalPaginas + " ---");
@@ -279,7 +306,6 @@ public class BaixarNFEAM extends WebScrapping {
             if (pagina > 1) {
                 formData.put("d-49612-p", String.valueOf(pagina));
                 String formPaginadoEncoded = dadosParaUrlEncoded(formData);
-                
                 resultado = postPagina(URL_PAGINACAO, formPaginadoEncoded);
             }
 
@@ -303,12 +329,8 @@ public class BaixarNFEAM extends WebScrapping {
             sb.append("&d-49612-p=");
 
             System.out.println("Baixando " + chaves.size() + " arquivos XML...");
-            
             byte[] arquivoZip = postPaginaBytes(URL_DOWNLOAD, sb.toString());
             
-            Path pastaTMP = Paths.get("tmp");
-            Files.createDirectories(pastaTMP);
-
             Path criandoZipTMP = pastaTMP.resolve("notas_modelo_" + modelo + "_pag" + pagina + ".zip");
             Files.write(criandoZipTMP, arquivoZip);
         }
@@ -327,10 +349,10 @@ public class BaixarNFEAM extends WebScrapping {
         + ".zip");
 
         // 3. Passa a pasta temporária (origem) e o ARQUIVO final (destino)
-        unificarZips(Path.of("tmp"), arquivoZipFinal);
+        unificarZips(pastaTMP, arquivoZipFinal);
         
         // 4. (Opcional) Apaga a pasta "tmp" no final, já que ela estará vazia
-        Files.deleteIfExists(Path.of("tmp"));
+        Files.deleteIfExists(pastaTMP);
 
         System.out.println("Consulta e download finalizados com sucesso!\n");
     }
