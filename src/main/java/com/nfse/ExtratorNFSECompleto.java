@@ -19,6 +19,25 @@ import org.apache.pdfbox.text.PDFTextStripper;
  */
 public class ExtratorNFSECompleto {
 
+    private static final Pattern PATTERN_NUMERO_NFSE = Pattern.compile("Número da NFS-e\\s+(\\d+)");
+    private static final Pattern PATTERN_DATA_EMISSAO = Pattern.compile("Data e Hora da emissão da NFS-e\\s+(.*)");
+    private static final Pattern PATTERN_VALOR_BRUTO = Pattern.compile("Valor do Serviço\\s+(.*)");
+    private static final Pattern PATTERN_VALOR_LIQUIDO = Pattern.compile("Valor Líquido da NFS-e\\s+(.*)");
+    private static final Pattern PATTERN_NOME_PRESTADOR = Pattern.compile("(?s)Prestador.*?Nome.*?Empresarial\\s+(.*?)\\s+(?:E-mail|Endere.o|Inscri..o|CNPJ)");
+    private static final Pattern PATTERN_CNPJ_PRESTADOR = Pattern.compile("(?s)Prestador.*?(?:CNPJ|CPF|NIF|Insc.*?Federal).*?([\\d\\./-]{14,18})");
+    private static final Pattern PATTERN_NOME_TOMADOR = Pattern.compile("(?s)TOMADOR.*?Nome.*?Empresarial\\s+(.*?)\\s+(?:E-mail|Endere.o|Inscri..o|CNPJ)");
+    private static final Pattern PATTERN_CNPJ_TOMADOR = Pattern.compile("(?s)TOMADOR.*?(?:CNPJ|CPF|NIF|Insc.*?Federal).*?([\\d\\./-]{14,18})");
+    private static final Pattern PATTERN_CODIGO_NACIONAL = Pattern.compile("(?s)C.digo de Tributa..o Nacional\\s+(.*?)(?=Descri..o|C.digo de Tributa..o Mun)");
+    private static final Pattern PATTERN_ISSQN_RETIDO = Pattern.compile("ISSQN Retido\\s+(.*)");
+    private static final Pattern PATTERN_ISSQN_APURADO = Pattern.compile("ISSQN Apurado\\s+(.*)");
+    private static final Pattern PATTERN_ISSQN_RETENCAO = Pattern.compile("Retenção do ISSQN\\s+(.*)");
+    private static final Pattern PATTERN_IRRF = Pattern.compile("IRRF\\s+(.*)");
+    private static final Pattern PATTERN_CONTRIB_PREV_RET = Pattern.compile("Contribuição Previdenciária - Retida\\s+(.*)");
+    private static final Pattern PATTERN_CONTRIB_SOC_RET = Pattern.compile("Contribuições Sociais - Retidas\\s+(.*)");
+    private static final Pattern PATTERN_PIS_APURACAO = Pattern.compile("PIS - Débito Apuração Própria\\s+(.*)");
+    private static final Pattern PATTERN_COFINS_APURACAO = Pattern.compile("COFINS - Débito Apuração Própria\\s+(.*)");
+    private static final Pattern PATTERN_DESC_PIS_COFINS = Pattern.compile("Descrição Contrib. Sociais - Retidas\\s+(.*)");
+
     private String caminhoPDF;
 
     public ExtratorNFSECompleto(String caminhoPDF) {
@@ -62,27 +81,33 @@ public class ExtratorNFSECompleto {
      * Processa um único PDF, extrai os campos desejados e grava uma linha no CSV.
      */
     private void extrairEGravar(File arquivoPDF, BufferedWriter writer) throws IOException {
+        String numeroNFSe = "";
+        String dataEmissao = "";
+        String nomePrestador = "";
+
         try (PDDocument documento = Loader.loadPDF(arquivoPDF)) {
             PDFTextStripper stripper = new PDFTextStripper();
             String textoCompleto = stripper.getText(documento);
+            //System.out.println(textoCompleto);
 
-            String numeroNFSe       = extrairCampo(textoCompleto, "(?s)N.mero da NFS-e\\s+(\\d+)", "TEXTO");
-            String dataEmissao      = extrairCampo(textoCompleto, "(?s)Data e Hora.*?(\\d{2}/\\d{2}/\\d{4})", "TEXTO");
-            String valorBruto       = extrairCampo(textoCompleto, "(?s)Valor do Servi.o.*?R\\$\\s+([\\d\\.,]+)", "DECIMAL");
-            String valorLiquido     = extrairCampo(textoCompleto, "(?s)Valor L.quido.*?R\\$\\s+([\\d\\.,]+)", "DECIMAL");
-            String nomePrestador    = extrairCampo(textoCompleto, "(?s)Prestador.*?Nome.*?Empresarial\\s+(.*?)\\s+(?:E-mail|Endere.o|Inscri..o|CNPJ)", "TEXTO");
-            String cnpjPrestador    = extrairCampo(textoCompleto, "(?s)Prestador.*?(?:CNPJ|CPF|NIF|Insc.*?Federal).*?([\\d\\./-]{14,18})", "TEXTO");
-            String nomeTomador      = extrairCampo(textoCompleto, "(?s)TOMADOR.*?Nome.*?Empresarial\\s+(.*?)\\s+(?:E-mail|Endere.o|Inscri..o|CNPJ)", "TEXTO");
-            String cnpjTomador      = extrairCampo(textoCompleto, "(?s)TOMADOR.*?(?:CNPJ|CPF|NIF|Insc.*?Federal).*?([\\d\\./-]{14,18})", "TEXTO");
-            String codigoNacional   = extrairCampo(textoCompleto, "(?s)C.digo de Tributa..o Nacional\\s+(.*?)(?=Descri..o|C.digo de Tributa..o Mun)", "TEXTO");
-            String issqnRetido      = extrairCampo(textoCompleto, "(?s)ISSQN Retido\\s+(?:R\\$\\s*)?([\\d\\.,-]+|N.o Retido)", "DECIMAL");
-            String issqnApurado     = extrairCampo(textoCompleto, "(?s)ISSQN Apurado\\s+(?:R\\$\\s*)?([\\d\\.,-]+)", "DECIMAL");
-            String irrf             = extrairCampo(textoCompleto, "(?s)IRRF\\s+(?:R\\$\\s*)?([\\d\\.,-]+)", "DECIMAL");
-            String contribPrevRet   = extrairCampo(textoCompleto, "(?s)Contribui..o Previdenci.ria.*?Retida\\s+(?:R\\$\\s*)?([\\d\\.,-]+)", "DECIMAL");
-            String contribSocRet    = extrairCampo(textoCompleto, "(?s)Contribui..es Sociais.*?Retidas\\s+(?:R\\$\\s*)?([\\d\\.,-]+)", "DECIMAL");
-            String pisApuracao      = extrairCampo(textoCompleto, "(?s)PIS\\s*[-–]?\\s*D.bito Apura..o Pr.pria\\s+(?:R\\$\\s*)?([\\d\\.,-]+)", "DECIMAL");
-            String cofinsApuracao   = extrairCampo(textoCompleto, "(?s)COFINS\\s*[-–]?\\s*D.bito Apura..o Pr.pria\\s+(?:R\\$\\s*)?([\\d\\.,-]+)", "DECIMAL");
-            String descricaoPisCofins = extrairCampo(textoCompleto, "((?mi)^[12]\\s*-\\s*PIS/COFINS\\s*(?:Não\\s*)?Retidos.*)", "TEXTO");
+            numeroNFSe       = extrairCampo(textoCompleto, PATTERN_NUMERO_NFSE, "TEXTO");
+            dataEmissao      = extrairCampo(textoCompleto, PATTERN_DATA_EMISSAO, "TEXTO");
+            String valorBruto       = extrairCampo(textoCompleto, PATTERN_VALOR_BRUTO, "DECIMAL");
+            String valorLiquido     = extrairCampo(textoCompleto, PATTERN_VALOR_LIQUIDO, "DECIMAL");
+            nomePrestador    = extrairCampo(textoCompleto, PATTERN_NOME_PRESTADOR, "TEXTO");
+            String cnpjPrestador    = extrairCampo(textoCompleto, PATTERN_CNPJ_PRESTADOR, "TEXTO");
+            String nomeTomador      = extrairCampo(textoCompleto, PATTERN_NOME_TOMADOR, "TEXTO");
+            String cnpjTomador      = extrairCampo(textoCompleto, PATTERN_CNPJ_TOMADOR, "TEXTO");
+            String codigoNacional   = extrairCampo(textoCompleto, PATTERN_CODIGO_NACIONAL, "TEXTO");
+            String retencaoISSQN    = extrairCampo(textoCompleto, PATTERN_ISSQN_RETENCAO, "DECIMAL");
+            String issqnRetido      = extrairCampo(textoCompleto, PATTERN_ISSQN_RETIDO, "DECIMAL");
+            String issqnApurado     = extrairCampo(textoCompleto, PATTERN_ISSQN_APURADO, "DECIMAL");
+            String irrf             = extrairCampo(textoCompleto, PATTERN_IRRF, "DECIMAL");
+            String contribPrevRet   = extrairCampo(textoCompleto, PATTERN_CONTRIB_PREV_RET, "DECIMAL");
+            String contribSocRet    = extrairCampo(textoCompleto, PATTERN_CONTRIB_SOC_RET, "DECIMAL");
+            String pisApuracao      = extrairCampo(textoCompleto, PATTERN_PIS_APURACAO, "DECIMAL");
+            String cofinsApuracao   = extrairCampo(textoCompleto, PATTERN_COFINS_APURACAO, "DECIMAL");
+            String descricaoPisCofins = extrairCampo(textoCompleto, PATTERN_DESC_PIS_COFINS, "TEXTO");
 
             String linhaCSV = String.join(";",
                 //limpar(arquivoPDF.getName()),
@@ -94,6 +119,7 @@ public class ExtratorNFSECompleto {
                 limpar(numeroNFSe),
                 limpar(codigoNacional),
                 limpar(valorBruto),
+                limpar(retencaoISSQN),
                 limpar(issqnRetido),
                 limpar(issqnApurado),
                 limpar(irrf),
@@ -107,6 +133,32 @@ public class ExtratorNFSECompleto {
             writer.write(linhaCSV);
             writer.newLine();
             writer.flush();
+        }
+
+        // Renomear o arquivo PDF após fechar o documento para evitar erro de arquivo em uso
+        if (nomePrestador != null && !nomePrestador.isEmpty() && 
+            dataEmissao != null && !dataEmissao.isEmpty() && 
+            numeroNFSe != null && !numeroNFSe.isEmpty()) {
+            
+            String nomePrestadorLimpo = nomePrestador.replaceAll("[^a-zA-Z0-9 ]", "").trim();
+            
+            String dataStr = dataEmissao.split(" ")[0];
+            String[] partesData = dataStr.split("/");
+            String dataEmissaoLimpa = partesData.length == 3 
+                ? partesData[2] + " " + partesData[1] + " " + partesData[0] 
+                : dataStr.replace("/", " ");
+                
+            String novoNome = String.format("%s %s NFSE %s.pdf", nomePrestadorLimpo, dataEmissaoLimpa, numeroNFSe);
+            
+            File novoArquivo = new File(arquivoPDF.getParent(), novoNome);
+            if (!novoArquivo.exists()) {
+                boolean renomeado = arquivoPDF.renameTo(novoArquivo);
+                if (renomeado) {
+                    System.out.printf("Arquivo renomeado para: %s%n", novoNome);
+                } else {
+                    System.err.printf("Falha ao renomear o arquivo: %s%n", arquivoPDF.getName());
+                }
+            }
         }
     }
 
@@ -144,10 +196,9 @@ public class ExtratorNFSECompleto {
     /**
      * Tenta extrair o valor usando a regex fornecida. Retorna o tipo se não achar.
      */
-    private String extrairCampo(String texto, String regex, String tipo) {
+    private String extrairCampo(String texto, Pattern pattern, String tipo) {
         if (texto == null) return tipagem(tipo);
         try {
-            Pattern pattern = Pattern.compile(regex);
             Matcher matcher = pattern.matcher(texto);
             if (matcher.find()) {
                 String resultado = matcher.group(1).trim();
@@ -155,7 +206,6 @@ public class ExtratorNFSECompleto {
                 return resultado;
             }
         } catch (Exception ignored) {
-
         }
         return tipagem(tipo);
     }
@@ -186,6 +236,7 @@ public class ExtratorNFSECompleto {
         "Numero NFS-e;" + 
         "Cod. Trib. Nacional;" + 
         "Valor Bruto;" + 
+        "Retenção ISSQN;" + 
         "ISSQN Retido;" + 
         "ISSQN Apurado;" + 
         "IRRF;" + 
